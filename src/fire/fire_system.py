@@ -20,18 +20,19 @@ class WindConditions:
         return cls(base_speed, base_direction, base_speed, base_direction, 0)
     
     def update(self, dt: float):
-        """Update wind conditions with realistic variations"""
+        """Update wind conditions with more realistic variations"""
         self.last_wobble += dt
         
         # Wobble direction every 20 seconds
         if self.last_wobble >= 20:
             self.last_wobble = 0
-            # Wobble ±30 degrees from base direction
-            direction_change = random.uniform(-np.pi/6, np.pi/6)
+            # Reduced direction variation (±15 degrees)
+            direction_change = random.uniform(-np.pi/12, np.pi/12)
             self.direction = self.base_direction + direction_change
             
-            # Small speed variations
-            speed_change = random.uniform(-2, 2) * 0.514  # ±2 knots
+            # Scale speed variations with base speed
+            max_variation = self.base_speed * 0.2  # 20% of base speed
+            speed_change = random.uniform(-max_variation, max_variation)
             self.speed = np.clip(self.base_speed + speed_change, 0, 16 * 0.514)
 
 class FireSystem:
@@ -69,27 +70,28 @@ class FireSystem:
         self._initialize_terrain()
     
     def _initialize_terrain(self):
-        # Generate terrain features using multiple Perlin noise layers
-        base_noise = PerlinNoise(octaves=4, seed=1)
-        detail_noise = PerlinNoise(octaves=8, seed=2)
-        cluster_noise = PerlinNoise(octaves=2, seed=3)
+        """Generate realistic terrain features using simplified noise patterns"""
+        # Create two main noise layers
+        terrain_noise = PerlinNoise(octaves=4, seed=1)
+        moisture_noise = PerlinNoise(octaves=3, seed=2)
         
         for i in range(self.grid_size):
             for j in range(self.grid_size):
-                nx = i/self.grid_size
-                ny = j/self.grid_size
+                # Use larger scale for more distinct patterns
+                nx = i / 50  # Increased scale for more visible patterns
+                ny = j / 50
                 
-                # Combine noise layers for more varied fuel patterns
-                base = base_noise([nx * 2, ny * 2])
-                detail = detail_noise([nx * 4, ny * 4]) * 0.5
-                cluster = cluster_noise([nx, ny])
+                # Generate base terrain with more contrast
+                terrain = terrain_noise([nx, ny])
+                moisture = moisture_noise([nx * 1.5, ny * 1.5])  # Slightly different scale
                 
-                # Create clustered high-fuel regions with lower overall fuel
-                fuel_value = (base + detail + max(0, cluster * 2)) / 3.0  # Increased divisor
-                humidity_noise = base_noise([nx * 2 + 5, ny * 2 + 5])
+                # Normalize and enhance contrast
+                terrain = self._normalize_noise(terrain, 0.3, 1.0)
+                moisture = self._normalize_noise(moisture, 0.2, 0.9)
                 
-                self.fuel_grid[i, j] = self._normalize_noise(fuel_value, 0.1, 0.8)  # Reduced fuel range
-                self.humidity_grid[i, j] = self._normalize_noise(humidity_noise, 0.2, 0.8)
+                # Create more distinct patterns
+                self.humidity_grid[i, j] = moisture
+                self.fuel_grid[i, j] = terrain * (1 - moisture * 0.6)  # Less moisture impact
     
     def _normalize_noise(self, value: float, min_val: float, max_val: float) -> float:
         """Normalize noise value to desired range"""
@@ -227,7 +229,7 @@ class FireSystem:
         return np.cos(angle_diff)
     
     def deploy_suppressants(self, wind: WindConditions):
-        """Deploy suppressants in a curved line to create a firebreak"""
+        """Deploy suppressants focusing on fire expansion direction"""
         if self.suppressant_count >= 50:
             return
         
@@ -244,11 +246,11 @@ class FireSystem:
         furthest_point = None
         
         # Wind direction vector (meteorological convention)
-        wind_i = -np.sin(wind.direction)  # Negative because grid i increases southward
-        wind_j = -np.cos(wind.direction)  # Negative because grid j increases eastward
+        wind_i = -np.sin(wind.direction)
+        wind_j = -np.cos(wind.direction)
         
+        # Find furthest burning point in wind direction
         for i, j in zip(*burning_locations):
-            # Project point onto wind direction
             projection = (i - center_i) * wind_i + (j - center_j) * wind_j
             if projection > max_projection:
                 max_projection = projection
@@ -257,20 +259,25 @@ class FireSystem:
         if furthest_point is None:
             return
         
-        # Place line 12 meters ahead in wind direction (changed from 15)
+        # Place line 12 meters ahead in wind direction
         fi, fj = furthest_point
         start_i = int(fi + wind_i * 12)
         start_j = int(fj + wind_j * 12)
         
         # Create perpendicular vector for the line
-        perp_i = -wind_j  # Perpendicular to wind direction
+        perp_i = -wind_j
         perp_j = wind_i
         
-        # Deploy suppressants in curved line
+        # Deploy suppressants with focus on wind direction
         line_length = 25
-        for t in range(-line_length, line_length + 1, 2):
-            # Reverse curve direction by negating curve_factor
-            curve_factor = -(t ** 2) / (4 * line_length)  # Added negative sign here
+        for t in range(-line_length, line_length + 1, 3):
+            # Adjust curve to focus more on the wind direction side
+            if t > 0:  # Downwind side
+                curve_factor = -(t ** 2) / (3 * line_length)  # Stronger curve downwind
+                spacing = 2  # Closer spacing
+            else:  # Upwind side
+                curve_factor = -(t ** 2) / (6 * line_length)  # Weaker curve upwind
+                spacing = 4  # Wider spacing
             
             point_i = int(start_i + perp_i * t + wind_i * curve_factor)
             point_j = int(start_j + perp_j * t + wind_j * curve_factor)
@@ -278,5 +285,10 @@ class FireSystem:
             if (0 <= point_i < self.grid_size and 
                 0 <= point_j < self.grid_size and
                 self.suppressant_count < 50):
-                self.suppressant_grid[point_i, point_j] = 1
+                # Create plus pattern
+                for di, dj in [(0,0), (1,0), (-1,0), (0,1), (0,-1)]:
+                    ni, nj = point_i + di, point_j + dj
+                    if (0 <= ni < self.grid_size and 
+                        0 <= nj < self.grid_size):
+                        self.suppressant_grid[ni, nj] = 1
                 self.suppressant_count += 1
