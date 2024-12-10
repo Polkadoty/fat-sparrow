@@ -230,7 +230,7 @@ class FireSystem:
     
     def deploy_suppressants(self, wind: WindConditions):
         """Deploy suppressants focusing on fire expansion direction"""
-        if self.suppressant_count >= 50:
+        if self.suppressant_count >= 40:
             return
         
         burning_locations = np.where(self.burning_grid > 0)
@@ -269,7 +269,7 @@ class FireSystem:
         perp_j = wind_i
         
         # Deploy suppressants with focus on wind direction
-        line_length = 25
+        line_length = 20
         for t in range(-line_length, line_length + 1, 3):
             # Adjust curve to focus more on the wind direction side
             if t > 0:  # Downwind side

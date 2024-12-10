@@ -4,6 +4,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.patches import FancyArrowPatch
 from fire_system import FireSystem, WindConditions
 from matplotlib import animation
+from pathlib import Path
 
 class FireVisualizer:
     def __init__(self, fire_system: FireSystem):
@@ -111,11 +112,12 @@ class FireVisualizer:
         else:
             self.im.set_array(vis_matrix)
         
-        # Add larger wind direction arrow in center
+        # Update wind direction arrow (flip direction by 180 degrees)
         center = self.fire_system.grid_size // 2
-        arrow_length = 12 * (self.wind_conditions.speed / (16 * 0.514))  # Increased base length
-        dx = arrow_length * np.cos(self.wind_conditions.direction)
-        dy = arrow_length * np.sin(self.wind_conditions.direction)
+        arrow_length = 12 * (self.wind_conditions.speed / (16 * 0.514))
+        # Add pi to direction to flip arrow
+        dx = arrow_length * np.cos(self.wind_conditions.direction + np.pi)
+        dy = arrow_length * np.sin(self.wind_conditions.direction + np.pi)
         
         # Create fancy red arrow
         self.wind_arrow = FancyArrowPatch(
@@ -175,27 +177,51 @@ class FireVisualizer:
         
         return [self.im, self.wind_arrow, self.wind_text, self.time_text, legend]
     
-    def animate_fire(self, frames=60, interval=100):
+    def save_final_image(self):
+        """Save final state with automatic numbering"""
+        import os
+        from pathlib import Path
+        
+        base_name = 'fire_final_state'
+        extension = '.png'
+        counter = 0
+        
+        while True:
+            if counter == 0:
+                filename = f'outputs/{base_name}{extension}'
+            else:
+                filename = f'outputs/{base_name}_{counter}{extension}'
+            
+            if not Path(filename).exists():
+                break
+            counter += 1
+        
+        plt.savefig(filename, bbox_inches='tight', dpi=300)
+        print(f"Final state saved as: {filename}")
+
+    def animate_fire(self, gif_name='outputs/fire_spread.gif', final_state_name='outputs/fire_final_state.png'):
         """Animate fire spread for 10 minutes"""
         # Create outputs directory if it doesn't exist
         import os
         os.makedirs('outputs', exist_ok=True)
         
-        # Set a fixed DPI and figure size to ensure consistent dimensions
+        # Set a fixed DPI and figure size
         self.fig.set_dpi(100)
         self.fig.set_size_inches(14, 12)
         
         # Create animation
         anim = FuncAnimation(self.fig, self.update_frame,
-                           frames=frames, interval=interval,
+                           frames=60, interval=100,
                            blit=True)
         
         # Use PillowWriter for GIF creation
         writer = animation.PillowWriter(fps=30)
-        anim.save('outputs/fire_spread.gif', writer=writer)
+        anim.save(gif_name, writer=writer)
         
-        plt.title('Fire Spread Simulation')
-        plt.show()
+        # Save final state
+        plt.savefig(final_state_name, bbox_inches='tight', dpi=300)
+        
+        plt.close()  # Close the figure to free memory
         return anim
 
     def save_outputs(self):
