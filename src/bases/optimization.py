@@ -117,54 +117,71 @@ class OptimizationSystem:
         
         return best_sites, best_coverage / (self.grid.grid_points ** 2)
 
-    def find_minimum_bases(self, max_bases: int = 15) -> dict:
-        """Find minimum number of bases needed for optimal 5-point coverage"""
+    def find_minimum_bases(self, max_bases: int = 16) -> dict:
+        """Find optimal number of bases where over/under coverage lines intersect"""
         print("\nSearching for optimal number of bases...")
         best_solution = None
         best_score = float('-inf')
         
-        for num_bases in range(5, max_bases + 1):
-            sites, _ = self.optimize_sites(num_bases, iterations=100)
+        # Track metrics for plotting
+        metrics_history = {
+            'optimal_coverage': [],
+            'under_coverage': [],
+            'over_coverage': [],
+            'num_bases': []
+        }
+        
+        # Start from 8 bases instead of 5, and use fewer iterations
+        for num_bases in range(8, max_bases + 1):
+            sites, _ = self.optimize_sites(num_bases, iterations=50)  # Reduced iterations
             
             # Get coverage statistics
             coverage_counts = self.grid.get_coverage_counts()
             zero_coverage = np.sum(coverage_counts == 0)
             
             # Calculate coverage metrics
-            optimal_coverage = np.sum(coverage_counts == 5)
-            under_coverage = np.sum(coverage_counts < 5)
-            over_coverage = np.sum(coverage_counts > 5)
-            
-            # Calculate efficiency score
             total_points = self.grid.grid_points ** 2
-            optimal_ratio = optimal_coverage / total_points
-            under_ratio = under_coverage / total_points
-            over_ratio = over_coverage / total_points
+            optimal_coverage = np.sum(coverage_counts == 5) / total_points
+            under_coverage = np.sum(coverage_counts < 5) / total_points
+            over_coverage = np.sum(coverage_counts > 5) / total_points
             
-            # Score prioritizes exactly 5 coverage
-            score = (optimal_ratio * 1000 -           # Reward optimal coverage
-                    under_ratio * 2500 -              # Heavily penalize under-coverage
-                    over_ratio * 500 -                # Lightly penalize over-coverage
-                    num_bases * 25)                   # Very small penalty for more bases
+            # Store metrics
+            metrics_history['optimal_coverage'].append(optimal_coverage)
+            metrics_history['under_coverage'].append(under_coverage)
+            metrics_history['over_coverage'].append(over_coverage)
+            metrics_history['num_bases'].append(num_bases)
+            
+            # Calculate intersection score - prioritize where under and over coverage lines meet
+            intersection_score = -abs(under_coverage - over_coverage) * 1000
+            coverage_score = (optimal_coverage * 1000 - 
+                            abs(under_coverage - over_coverage) * 2000 -
+                            num_bases * 25)
             
             print(f"\nConfiguration with {num_bases} bases:")
-            print(f"Optimal coverage (5): {optimal_ratio:.1%}")
-            print(f"Under coverage (<5): {under_ratio:.1%}")
-            print(f"Over coverage (>5): {over_ratio:.1%}")
-            print(f"Score: {score:.2f}")
+            print(f"Optimal coverage (5): {optimal_coverage:.1%}")
+            print(f"Under coverage (<5): {under_coverage:.1%}")
+            print(f"Over coverage (>5): {over_coverage:.1%}")
+            print(f"Score: {coverage_score:.2f}")
             
-            if score > best_score and zero_coverage == 0:
-                best_score = score
+            # Update best solution when lines are closest to crossing
+            if coverage_score > best_score and zero_coverage == 0:
+                best_score = coverage_score
                 best_solution = {
                     'sites': sites,
                     'num_sites': num_bases,
-                    'coverage': score,
-                    'optimal_ratio': optimal_ratio,
-                    'under_ratio': under_ratio,
-                    'over_ratio': over_ratio
+                    'coverage': coverage_score,
+                    'optimal_ratio': optimal_coverage,
+                    'under_ratio': under_coverage,
+                    'over_ratio': over_coverage
                 }
                 print(f"New best configuration found!")
+                
+                # If we've found a good intersection point, we can stop
+                if abs(under_coverage - over_coverage) < 0.05:
+                    print(f"Found optimal intersection at {num_bases} bases!")
+                    break
         
+        best_solution['metrics_history'] = metrics_history
         return best_solution
 
     def perturb_sites(self, sites: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
@@ -218,18 +235,16 @@ class OptimizationSystem:
         over_coverage = np.sum(coverage_counts > target)
         optimal_coverage = np.sum(coverage_counts == target)
         
-        # Calculate weighted score components
-        under_penalty = under_coverage * 2500      # Heavy penalty for under-coverage
-        over_penalty = over_coverage * 500         # Lighter penalty for over-coverage
-        optimal_bonus = optimal_coverage * 2500
+        # Calculate intersection penalty
+        intersection_penalty = abs(under_coverage - over_coverage) * 2000
         
-        # Additional penalties for extreme under-coverage
-        extreme_under = np.sum(coverage_counts < 4) * 4000
+        # Calculate weighted score components
+        optimal_bonus = optimal_coverage * 2500
+        base_penalty = num_sites * 25
         
         # Calculate final score
         score = (optimal_bonus - 
-                under_penalty - 
-                over_penalty - 
-                extreme_under)
+                intersection_penalty - 
+                base_penalty)
         
         return score

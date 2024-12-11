@@ -5,6 +5,7 @@ from matplotlib.patches import Circle
 import matplotlib.colors as colors
 from typing import List, Tuple, Dict
 from grid_system import GridSystem
+import os
 
 class Visualizer:
     def __init__(self, grid: GridSystem):
@@ -20,9 +21,26 @@ class Visualizer:
         density_matrix = np.zeros((self.grid.grid_points, self.grid.grid_points))
         all_history = []
         
-        # Combine histories from all base numbers
+        # Combine histories from all base numbers, taking only 5 samples per base number
+        current_base_count = None
+        current_base_frames = []
+        
         for sites_list in optimizer.base_history:
-            all_history.append(sites_list)
+            num_bases = len(sites_list)
+            if num_bases != current_base_count:
+                if current_base_frames:
+                    # Sample 5 frames from previous base count
+                    indices = np.linspace(0, len(current_base_frames)-1, 5, dtype=int)
+                    all_history.extend([current_base_frames[i] for i in indices])
+                current_base_count = num_bases
+                current_base_frames = [sites_list]
+            else:
+                current_base_frames.append(sites_list)
+        
+        # Add remaining frames
+        if current_base_frames:
+            indices = np.linspace(0, len(current_base_frames)-1, 5, dtype=int)
+            all_history.extend([current_base_frames[i] for i in indices])
         
         def update(frame):
             if frame < len(all_history):
@@ -133,3 +151,66 @@ class Visualizer:
         self.plot_coverage_heatmap(sites)
         plt.savefig(filename, format='svg', bbox_inches='tight')
         plt.close()
+
+    def animate_coverage_metrics(self, metrics_history):
+        """Create animated line plot of coverage metrics"""
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        def update(frame):
+            ax.clear()
+            # Use actual frame number for all frames except the last few
+            if frame < len(metrics_history['num_bases']):
+                end_idx = frame + 1
+            else:
+                # For extra frames, keep showing the final state
+                end_idx = len(metrics_history['num_bases'])
+            
+            # Plot lines
+            ax.plot(metrics_history['num_bases'][:end_idx], 
+                    np.array(metrics_history['optimal_coverage'][:end_idx]) * 100,
+                    'g-', label='Optimal Coverage (5)')
+            ax.plot(metrics_history['num_bases'][:end_idx],
+                    np.array(metrics_history['under_coverage'][:end_idx]) * 100,
+                    'r-', label='Under Coverage (<5)')
+            ax.plot(metrics_history['num_bases'][:end_idx],
+                    np.array(metrics_history['over_coverage'][:end_idx]) * 100,
+                    'b-', label='Over Coverage (>5)')
+            
+            ax.set_xlabel('Number of Bases')
+            ax.set_ylabel('Coverage (%)')
+            ax.set_title('Coverage Metrics vs Number of Bases')
+            ax.grid(True)
+            ax.legend()
+            ax.set_ylim(0, 100)
+            
+            return []
+        
+        # Add 10 extra frames at the end
+        total_frames = len(metrics_history['num_bases']) + 10
+        anim = FuncAnimation(fig, update,
+                            frames=total_frames,
+                            interval=200,
+                            repeat=False)
+        
+        return anim, fig
+
+    def save_coverage_metrics_animation(self, metrics_history, filename='outputs/coverage_metrics.gif'):
+        """Save coverage metrics animation as gif and final frame as png"""
+        # Create outputs directory if it doesn't exist
+        os.makedirs('outputs', exist_ok=True)
+        
+        anim, fig = self.animate_coverage_metrics(metrics_history)
+        
+        # Save the animation
+        anim.save(filename, writer='pillow', fps=5)
+        
+        # Save the final frame as high-quality PNG
+        png_filename = filename.replace('.gif', '_final.png')
+        
+        # Create the final frame
+        update = anim._func  # Get the update function
+        update(len(metrics_history['num_bases']))  # Update to final state
+        
+        # Save as high-quality PNG
+        fig.savefig(png_filename, dpi=300, bbox_inches='tight')
+        plt.close(fig)
