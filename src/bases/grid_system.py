@@ -13,20 +13,25 @@ class GridSystem:
         self.grid = np.zeros((self.grid_points, self.grid_points))
         self.launch_sites: List[Tuple[float, float]] = []
         
+        # Wind conditions (16 knots in random direction)
+        self.wind_speed_knots = 16.0
+        self.wind_direction = np.random.uniform(0, 2 * np.pi)
+        
         # Calculate fixed range circle
         speed_mps = self.AIRCRAFT_SPEED * self.NM_TO_METERS / 3600
         remaining_time = 420  # 7 minutes after launch
         self.max_range = speed_mps * remaining_time
 
     def get_coverage_counts(self) -> np.ndarray:
-        """Return matrix showing how many bases can reach each point"""
+        """Return matrix showing how many bases can reach each point with wind adjustment"""
         coverage_counts = np.zeros((self.grid_points, self.grid_points))
         
         for i in range(self.grid_points):
             for j in range(self.grid_points):
                 point = (i * self.GRID_RESOLUTION, j * self.GRID_RESOLUTION)
                 for site in self.launch_sites:
-                    if self.calculate_distance(point, site) <= self.max_range:
+                    wind_adjusted_dist = self.calculate_wind_adjusted_distance(site, point)
+                    if wind_adjusted_dist <= self.max_range:
                         coverage_counts[i, j] += 1
         
         return coverage_counts
@@ -81,3 +86,27 @@ class GridSystem:
                         break
                         
         return coverage 
+
+    def calculate_wind_adjusted_distance(self, point1: Tuple[float, float], 
+                                      point2: Tuple[float, float]) -> float:
+        """Calculate wind-adjusted distance between two points"""
+        base_distance = self.calculate_distance(point1, point2)
+        
+        # Calculate direction from point1 to point2
+        dx = point2[0] - point1[0]
+        dy = point2[1] - point1[1]
+        travel_direction = np.arctan2(dy, dx)
+        
+        # Calculate wind effect based on relative angle
+        relative_angle = travel_direction - self.wind_direction
+        wind_effect = np.cos(relative_angle) * self.wind_speed_knots * self.NM_TO_METERS / 3600
+        
+        # Adjust effective ground speed
+        speed_mps = self.AIRCRAFT_SPEED * self.NM_TO_METERS / 3600
+        effective_speed = speed_mps - wind_effect
+        
+        # Calculate time needed
+        time_needed = base_distance / effective_speed
+        
+        # Return equivalent no-wind distance
+        return time_needed * speed_mps

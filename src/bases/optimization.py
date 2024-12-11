@@ -28,48 +28,33 @@ class OptimizationSystem:
         return prob - edge_penalty * 0.15
 
     def generate_initial_sites(self, num_sites: int = 4) -> List[Tuple[float, float]]:
-        """Generate initial launch sites with better coverage guarantee"""
+        """Generate initial launch sites using radial distribution"""
         sites = []
         max_radius = min(self.grid.area_size_meters / 2.2,
                         self.grid.max_range * 1.1)
         center = (self.grid.area_size_meters / 2, self.grid.area_size_meters / 2)
         
-        # First, ensure coverage of corners and edges
-        edge_margin = self.grid.max_range * 0.15
-        edge_positions = [
-            (edge_margin, edge_margin),  # Bottom left
-            (edge_margin, self.grid.area_size_meters - edge_margin),  # Top left
-            (self.grid.area_size_meters - edge_margin, edge_margin),  # Bottom right
-            (self.grid.area_size_meters - edge_margin, 
-             self.grid.area_size_meters - edge_margin)  # Top right
-        ]
+        # Generate sites using radial distribution
+        angles = np.linspace(0, 2 * np.pi, num_sites, endpoint=False)
+        np.random.shuffle(angles)
         
-        # Add corner bases if we have enough sites
-        if num_sites >= 4:
-            sites.extend(edge_positions[:min(4, num_sites)])
-        
-        # Add remaining sites using radial distribution
-        remaining_sites = num_sites - len(sites)
-        if remaining_sites > 0:
-            angles = np.linspace(0, 2 * np.pi, remaining_sites, endpoint=False)
-            np.random.shuffle(angles)
+        for angle in angles:
+            while True:
+                # Increased minimum radius to avoid center clustering
+                radius = np.random.uniform(0.4 * max_radius, max_radius)
+                prob = self.calculate_radial_probability(radius, max_radius)
+                if np.random.random() < prob:
+                    break
             
-            for angle in angles:
-                while True:
-                    radius = np.random.uniform(0.3 * max_radius, max_radius)
-                    prob = self.calculate_radial_probability(radius, max_radius)
-                    if np.random.random() < prob:
-                        break
-                
-                x = center[0] + radius * np.cos(angle)
-                y = center[1] + radius * np.sin(angle)
-                
-                # Ensure within bounds
-                margin = self.grid.max_range * 0.15
-                x = np.clip(x, margin, self.grid.area_size_meters - margin)
-                y = np.clip(y, margin, self.grid.area_size_meters - margin)
-                
-                sites.append((x, y))
+            x = center[0] + radius * np.cos(angle)
+            y = center[1] + radius * np.sin(angle)
+            
+            # Ensure within bounds with larger margin
+            margin = self.grid.max_range * 0.2  # Increased margin
+            x = np.clip(x, margin, self.grid.area_size_meters - margin)
+            y = np.clip(y, margin, self.grid.area_size_meters - margin)
+            
+            sites.append((x, y))
         
         return sites
 

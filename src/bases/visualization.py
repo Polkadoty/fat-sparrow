@@ -62,10 +62,10 @@ class Visualizer:
         return anim
 
     def plot_coverage_heatmap(self, sites: List[Tuple[float, float]]):
-        """Plot heatmap showing number of bases that can reach each point"""
+        """Plot coverage heatmap with wind-adjusted range circles"""
         plt.figure(figsize=(12, 10))
         
-        # Calculate coverage counts
+        # Set launch sites and get coverage
         self.grid.launch_sites = sites
         coverage_counts = self.grid.get_coverage_counts()
         
@@ -76,23 +76,48 @@ class Visualizer:
                        origin='lower',
                        cmap='RdYlBu')
         
-        # Plot base locations and range circles
+        # Plot base locations and wind-adjusted range ellipses
         for site in sites:
             x_nm = site[0] / self.grid.NM_TO_METERS
             y_nm = site[1] / self.grid.NM_TO_METERS
             
-            # Add range circle
-            circle = Circle((x_nm, y_nm), 
-                          self.grid.max_range / self.grid.NM_TO_METERS,
-                          fill=False, color='black', alpha=0.5)
-            plt.gca().add_patch(circle)
+            # Create points for wind-adjusted range
+            angles = np.linspace(0, 2*np.pi, 100)
+            range_points_x = []
+            range_points_y = []
+            
+            for angle in angles:
+                # Create point at max range
+                dx = np.cos(angle) * self.grid.max_range
+                dy = np.sin(angle) * self.grid.max_range
+                point = (site[0] + dx, site[1] + dy)
+                
+                # Adjust for wind
+                wind_adjusted_dist = self.grid.calculate_wind_adjusted_distance(site, point)
+                scale_factor = self.grid.max_range / wind_adjusted_dist
+                
+                range_points_x.append((site[0] + dx * scale_factor) / self.grid.NM_TO_METERS)
+                range_points_y.append((site[1] + dy * scale_factor) / self.grid.NM_TO_METERS)
+            
+            # Plot wind-adjusted range
+            plt.plot(range_points_x, range_points_y, '--', color='black', alpha=0.5)
             
             # Plot base location
             plt.plot(x_nm, y_nm, 'k^', markersize=10)
         
+        # Add wind vector arrow
+        wind_speed_nm = self.grid.wind_speed_knots / 3600  # Convert to NM/s
+        center_x = self.grid.AREA_SIZE_NM / 2
+        center_y = self.grid.AREA_SIZE_NM / 2
+        wind_dx = np.cos(self.grid.wind_direction) * wind_speed_nm * 3600  # Scale for visibility
+        wind_dy = np.sin(self.grid.wind_direction) * wind_speed_nm * 3600
+        
+        plt.arrow(center_x, center_y, wind_dx, wind_dy, 
+                 head_width=0.5, head_length=0.8, fc='red', ec='red', alpha=0.7)
+        
         plt.colorbar(im, label='Number of Bases in Range')
         plt.title(f'Coverage Map - {len(sites)} Bases\n'
-                 f'Aircraft Speed: {self.grid.AIRCRAFT_SPEED} knots')
+                 f'Wind: {self.grid.wind_speed_knots:.0f} kts @ {np.degrees(self.grid.wind_direction):.0f}°')
         plt.xlabel('Distance (NM)')
         plt.ylabel('Distance (NM)')
         plt.grid(True)
