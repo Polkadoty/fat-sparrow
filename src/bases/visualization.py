@@ -194,10 +194,10 @@ class Visualizer:
         
         return anim, fig
 
-    def save_coverage_metrics_animation(self, metrics_history, filename='outputs/coverage_metrics.gif'):
+    def save_coverage_metrics_animation(self, metrics_history, filename='outputs/base_optimization/coverage_metrics.gif'):
         """Save coverage metrics animation as gif and final frame as png"""
-        # Create outputs directory if it doesn't exist
-        os.makedirs('outputs', exist_ok=True)
+        # Create parent directory if it doesn't exist
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         
         anim, fig = self.animate_coverage_metrics(metrics_history)
         

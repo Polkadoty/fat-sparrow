@@ -2,8 +2,13 @@ import numpy as np
 from grid_system import GridSystem
 from optimization import OptimizationSystem
 from visualization import Visualizer
+import os
 
 def main():
+    # Create output directories
+    os.makedirs('outputs/base_optimization', exist_ok=True)
+    os.makedirs('outputs/base_coverage', exist_ok=True)
+    
     grid = GridSystem()
     optimizer = OptimizationSystem(grid)
     visualizer = Visualizer(grid)
@@ -25,14 +30,21 @@ def main():
     print(f"Number of Sites: {best_solution['num_sites']}")
     print(f"Coverage Score: {best_solution['coverage']:.2f}")
     
-    # Save coverage metrics animation in outputs folder
-    visualizer.save_coverage_metrics_animation(best_solution['metrics_history'])
+    # Save outputs to appropriate subdirectories
+    visualizer.save_coverage_metrics_animation(
+        best_solution['metrics_history'],
+        'outputs/base_optimization/coverage_metrics.gif'
+    )
     
-    # Save optimization animation as gif (compressed)
-    visualizer.save_optimization_animation(optimizer, 'outputs/optimization.gif')
+    visualizer.save_optimization_animation(
+        optimizer, 
+        'outputs/base_optimization/optimization.gif'
+    )
     
-    # Save final coverage heatmap as svg
-    visualizer.plot_and_save_coverage_heatmap(best_solution['sites'], 'outputs/coverage.svg')
+    visualizer.plot_and_save_coverage_heatmap(
+        best_solution['sites'], 
+        'outputs/base_coverage/coverage.svg'
+    )
 
 if __name__ == "__main__":
     main()  

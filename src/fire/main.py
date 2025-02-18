@@ -105,8 +105,9 @@ def main():
                        help='Number of simulation runs')
     args = parser.parse_args()
     
-    # Create outputs directory
-    os.makedirs('outputs', exist_ok=True)
+    # Create outputs directory with subdirectories
+    os.makedirs('outputs/fire_simulations', exist_ok=True)
+    os.makedirs('outputs/fire_grids', exist_ok=True)
     
     gif_files = []
     final_state_files = []
@@ -121,9 +122,9 @@ def main():
         # Create visualizer and run animation
         visualizer = FireVisualizer(fire_system)
         
-        # Set unique filenames for this run
-        gif_name = f'outputs/fire_spread_{i}.gif'
-        final_state_name = f'outputs/fire_final_state_{i}.png'
+        # Set unique filenames for this run using subdirectories
+        gif_name = f'outputs/fire_simulations/fire_spread_{i}.gif'
+        final_state_name = f'outputs/fire_simulations/fire_final_state_{i}.png'
         
         gif_files.append(gif_name)
         final_state_files.append(final_state_name)
@@ -133,17 +134,12 @@ def main():
     
     if args.num_runs > 1:
         print("\nCreating final grid layouts...")
-        # Create grid layouts
-        create_image_grid(final_state_files, 'outputs/final_states_grid.png')
+        # Create grid layouts in grids subdirectory
+        create_image_grid(final_state_files, 'outputs/fire_grids/final_states_grid.png')
         print("Created final states grid")
         
-        create_gif_grid(gif_files, 'outputs/animations_grid.gif')
+        create_gif_grid(gif_files, 'outputs/fire_grids/animations_grid.gif')
         print("Created animations grid")
-        
-        print("\nAll outputs saved in outputs/ directory:")
-        print("- Individual simulation GIFs: fire_spread_[0-N].gif")
-        print("- Individual final states: fire_final_state_[0-N].png")
-        print("- Combined grids: final_states_grid.png and animations_grid.gif")
 
 if __name__ == "__main__":
     main()

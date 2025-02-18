@@ -31,3 +31,15 @@ This system optimizes the placement of aircraft launch sites to ensure complete 
    - Aircraft banking/turning mechanics
 
 ## Project Structure
+
+project/
+├── src/
+│   ├── bases/          # Base optimization code
+│   ├── fire/           # Fire simulation code
+│   └── payload/        # Payload deployment code
+├── outputs/
+│   ├── base_optimization/  # Base placement optimization results
+│   ├── base_coverage/      # Coverage analysis outputs
+│   ├── fire_simulations/   # Individual fire simulation results
+│   └── fire_grids/         # Combined fire simulation grids
+└── README.md
