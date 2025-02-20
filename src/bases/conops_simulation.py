@@ -66,155 +66,237 @@ class ConOpsSimulation:
         self.elapsed_time = 0
         self.phase = 'patrol'  # patrol, response, mass_response
         
+    def generate_patrol_route(self) -> List[Tuple[float, float]]:
+        """
+        Generate a rectangular racetrack search pattern, traversed clockwise.
+
+        The route goes:
+          - Up along the left edge,
+          - Right along the top edge,
+          - Down along the right edge,
+          - Left along the bottom edge.
+        """
+        # Define boundaries (you can adjust these as needed)
+        left_x = 1.67
+        right_x = 5.93
+        bottom_y = 2
+        top_y = 14.7
+        num_points = 50  # points along each edge for smoothness
+
+        route_points = []
+        # Left edge (from bottom to top) – flying north
+        for y in np.linspace(bottom_y, top_y, num_points):
+            route_points.append((left_x, y))
+        # Top edge (from left to right) – flying east
+        for x in np.linspace(left_x, right_x, num_points):
+            route_points.append((x, top_y))
+        # Right edge (from top to bottom) – flying south
+        for y in np.linspace(top_y, bottom_y, num_points):
+            route_points.append((right_x, y))
+        # Bottom edge (from right to left) – flying west
+        for x in np.linspace(right_x, left_x, num_points):
+            route_points.append((x, bottom_y))
+
+        return route_points
+
+    def generate_rounded_racetrack_route(self, center: Tuple[float, float], width: float, height: float, 
+                                           corner_radius: float, p_straight: int = 20, p_arc: int = 10) -> List[Tuple[float, float]]:
+        """
+        Generate a rounded racetrack route (rounded rectangle) in clockwise order.
+
+        The rounded rectangle is built from four straight segments and four quarter-circle arcs.
+        The order of segments is:
+          1. Top edge (left to right)
+          2. Top-right corner (arc from 90° to 0°)
+          3. Right edge (top to bottom)
+          4. Bottom-right corner (arc from 0° to -90°)
+          5. Bottom edge (right to left)
+          6. Bottom-left corner (arc from -90° to -180°)
+          7. Left edge (bottom to top)
+          8. Top-left corner (arc from 180° to 90°)
+
+        :param center: Center of the rectangle (x, y).
+        :param width: Total width of the rectangle.
+        :param height: Total height of the rectangle.
+        :param corner_radius: Radius for rounding the corners.
+        :param p_straight: Number of points for each straight segment.
+        :param p_arc: Number of points for each arc segment.
+        :return: List of (x, y) points representing the route.
+        """
+        cx, cy = center
+        x_min = cx - width / 2
+        x_max = cx + width / 2
+        y_min = cy - height / 2
+        y_max = cy + height / 2
+        r = corner_radius
+
+        route = []
+
+        # 1. Top edge: from (x_min + r, y_max) to (x_max - r, y_max)
+        top_edge = [(x, y_max) for x in np.linspace(x_min + r, x_max - r, p_straight)]
+        route.extend(top_edge)
+
+        # 2. Top-right corner: arc with center at (x_max - r, y_max - r)
+        center_tr = (x_max - r, y_max - r)
+        angles_tr = np.linspace(np.pi/2, 0, p_arc, endpoint=False)
+        arc_tr = [(center_tr[0] + r * np.cos(theta), center_tr[1] + r * np.sin(theta)) for theta in angles_tr]
+        route.extend(arc_tr)
+
+        # 3. Right edge: from (x_max, y_max - r) down to (x_max, y_min + r)
+        right_edge = [(x_max, y) for y in np.linspace(y_max - r, y_min + r, p_straight)]
+        route.extend(right_edge)
+
+        # 4. Bottom-right corner: arc with center at (x_max - r, y_min + r)
+        center_br = (x_max - r, y_min + r)
+        angles_br = np.linspace(0, -np.pi/2, p_arc, endpoint=False)
+        arc_br = [(center_br[0] + r * np.cos(theta), center_br[1] + r * np.sin(theta)) for theta in angles_br]
+        route.extend(arc_br)
+
+        # 5. Bottom edge: from (x_max - r, y_min) to (x_min + r, y_min)
+        bottom_edge = [(x, y_min) for x in np.linspace(x_max - r, x_min + r, p_straight)]
+        route.extend(bottom_edge)
+
+        # 6. Bottom-left corner: arc with center at (x_min + r, y_min + r)
+        center_bl = (x_min + r, y_min + r)
+        angles_bl = np.linspace(-np.pi/2, -np.pi, p_arc, endpoint=False)
+        arc_bl = [(center_bl[0] + r * np.cos(theta), center_bl[1] + r * np.sin(theta)) for theta in angles_bl]
+        route.extend(arc_bl)
+
+        # 7. Left edge: from (x_min, y_min + r) up to (x_min, y_max - r)
+        left_edge = [(x_min, y) for y in np.linspace(y_min + r, y_max - r, p_straight)]
+        route.extend(left_edge)
+
+        # 8. Top-left corner: arc with center at (x_min + r, y_max - r)
+        center_tl = (x_min + r, y_max - r)
+        angles_tl = np.linspace(np.pi, np.pi/2, p_arc, endpoint=False)
+        arc_tl = [(center_tl[0] + r * np.cos(theta), center_tl[1] + r * np.sin(theta)) for theta in angles_tl]
+        route.extend(arc_tl)
+
+        return route
+
+    def get_evenly_spaced_points(self, route: List[Tuple[float, float]], num_points: int) -> List[Tuple[float, float]]:
+        """
+        Given a route (list of (x,y) points forming a closed loop), re-sample and return `num_points`
+        uniformly spaced along the entire perimeter.
+        """
+        # Ensure the route is a closed loop.
+        if route[0] != route[-1]:
+            closed_route = route + [route[0]]
+        else:
+            closed_route = route
+
+        # Compute cumulative distances along the closed route.
+        cum_dist = [0.0]
+        for i in range(1, len(closed_route)):
+            dx = closed_route[i][0] - closed_route[i - 1][0]
+            dy = closed_route[i][1] - closed_route[i - 1][1]
+            cum_dist.append(cum_dist[-1] + np.hypot(dx, dy))
+        total_length = cum_dist[-1]
+        spacing = total_length / num_points
+
+        uniform_points = []
+        seg = 0
+        for i in range(num_points):
+            target = i * spacing
+            # Advance the segment until the target is less than the next cumulative distance.
+            while seg < len(cum_dist) - 1 and cum_dist[seg + 1] < target:
+                seg += 1
+            # Linear interpolation for the target point.
+            seg_length = cum_dist[seg + 1] - cum_dist[seg]
+            if seg_length == 0:
+                t = 0
+            else:
+                t = (target - cum_dist[seg]) / seg_length
+            x = closed_route[seg][0] + t * (closed_route[seg + 1][0] - closed_route[seg][0])
+            y = closed_route[seg][1] + t * (closed_route[seg + 1][1] - closed_route[seg][1])
+            uniform_points.append((x, y))
+        return uniform_points
+
+    def find_nearest_index(self, route: List[Tuple[float, float]], point: Tuple[float, float]) -> int:
+        """
+        Return the index of the point in `route` that is closest to the given `point`.
+        """
+        best_idx = 0
+        best_dist = float('inf')
+        for i, pt in enumerate(route):
+            dist = self.calculate_distance(pt, point)
+            if dist < best_dist:
+                best_dist = dist
+                best_idx = i
+        return best_idx
+
     def setup_patrol_routes(self):
-        """Create patrol routes for both sides simultaneously"""
-        left_patrol = self.generate_patrol_route(True)   # Left side patrol
-        right_patrol = self.generate_patrol_route(False) # Right side patrol
-        
-        # Create 8 aircraft for each patrol route, evenly spaced
+        """
+        Create two patrol routes for search aircraft using rounded racetrack patterns.
+        Left route is centered on FOBs 3 & 4 while right route is centered on FOBs 1 & 2.
+        Each route is assigned 8 aircraft (total of 16).
+        The aircraft starting positions are evenly spaced along the route,
+        and their heading is initialized based on the direction toward the next evenly
+        spaced point.
+        """
         self.aircraft = []
-        for i in range(8):
-            # Left patrol aircraft (clockwise)
-            start_index = (i * len(left_patrol) // 8) % len(left_patrol)
-            points_per_side = len(left_patrol) // 4
-            section = (start_index // points_per_side) % 4  # 0=left, 1=top, 2=right, 3=bottom
-            heading = {
-                0: np.pi/2,    # left side: going up
-                1: 0,          # top: going right
-                2: -np.pi/2,   # right side: going down
-                3: np.pi       # bottom: going left
-            }[section]
-            
+        num_aircraft_per_route = 8
+
+        # Overall simulation center and offset from the __init__ parameters.
+        sim_center = self.AREA_SIZE_NM / 2  # e.g., 8.535 if AREA_SIZE_NM is 17.07
+        offset = 5  # Distance from center to FOBs (as defined in __init__)
+
+        # Define centers for the two racetracks based on the FOB clusters.
+        # For the left route (FOB 3 & FOB 4) and right route (FOB 1 & FOB 2).
+        left_center = (sim_center - offset, sim_center)
+        right_center = (sim_center + offset, sim_center)
+
+        # Use the old patrol dimensions (4.27 nm wide, 14 nm tall) as desired.
+        route_width = 4.27   # 4.27 nm wide
+        route_height = 14.0  # 14 nm tall
+        corner_radius = 0.5
+
+        left_route = self.generate_rounded_racetrack_route(left_center, route_width, route_height, corner_radius)
+        right_route = self.generate_rounded_racetrack_route(right_center, route_width, route_height, corner_radius)
+
+        # Determine the FOBs for each route.
+        left_fobs = [base for base in self.bases if base.name in ['FOB 3', 'FOB 4']]
+        right_fobs = [base for base in self.bases if base.name in ['FOB 1', 'FOB 2']]
+
+        # Get 8 evenly spaced starting positions along the full perimeter for each route.
+        uniform_left_points = self.get_evenly_spaced_points(left_route, num_aircraft_per_route)
+        uniform_right_points = self.get_evenly_spaced_points(right_route, num_aircraft_per_route)
+
+        # Initialize aircraft for the left route.
+        for i, pos in enumerate(uniform_left_points):
+            # For robust heading determination, find the nearest index in the detailed route.
+            patrol_index = self.find_nearest_index(left_route, pos)
+            # Next target: use the next point in the detailed route (cyclically).
+            next_index = (patrol_index + 1) % len(left_route)
+            dx = left_route[next_index][0] - left_route[patrol_index][0]
+            dy = left_route[next_index][1] - left_route[patrol_index][1]
+            heading = np.arctan2(dy, dx)
+            base = left_fobs[i % len(left_fobs)]
             self.aircraft.append(Aircraft(
-                position=left_patrol[start_index],
+                position=pos,
                 heading=heading,
-                base=self.bases[1],
+                base=base,
                 state='patrol',
-                patrol_points=left_patrol,
-                patrol_index=start_index
-            ))
-            
-            # Right patrol aircraft (counterclockwise)
-            start_index = (i * len(right_patrol) // 8) % len(right_patrol)
-            section = (start_index // points_per_side) % 4
-            # Different heading map for right patrol
-            heading = {
-                0: -np.pi/2,   # left side: going down
-                1: 0,          # top: going right
-                2: np.pi/2,    # right side: going up
-                3: np.pi       # bottom: going left
-            }[section]
-            
-            self.aircraft.append(Aircraft(
-                position=right_patrol[start_index],
-                heading=heading,
-                base=self.bases[2],
-                state='patrol',
-                patrol_points=right_patrol,
-                patrol_index=start_index
+                patrol_points=left_route,
+                patrol_index=patrol_index
             ))
 
-    def generate_patrol_route(self, is_left_route: bool) -> List[Tuple[float, float]]:
-        """Generate vertical patrol route with specified direction"""
-        if is_left_route:
-            # Left patrol route coordinates (clockwise)
-            left_line_x = 1.67
-            right_line_x = 5.93
-        else:
-            # Right patrol route coordinates (counterclockwise)
-            left_line_x = 11.14    # 17.07 - 5.93
-            right_line_x = 15.4    # 17.07 - 1.67
-        
-        y_bottom = 2
-        y_top = 14.7
-        r = self.TURN_RADIUS_NM
-        
-        # Create route points based on direction
-        route_points = []
-        
-        if is_left_route:
-            # Left vertical line (going up)
-            for y in np.linspace(y_bottom + r, y_top - r, 40):
-                route_points.append((left_line_x, y))
-            
-            # Top-left corner
-            for angle in np.linspace(-np.pi/2, 0, 20):
-                x = left_line_x + r * np.cos(angle)
-                y = y_top - r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Top horizontal line
-            for x in np.linspace(left_line_x + r, right_line_x - r, 40):
-                route_points.append((x, y_top))
-            
-            # Top-right corner
-            for angle in np.linspace(0, np.pi/2, 20):
-                x = right_line_x - r + r * np.cos(angle)
-                y = y_top - r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Right vertical line (going down)
-            for y in np.linspace(y_top - r, y_bottom + r, 40)[::-1]:
-                route_points.append((right_line_x, y))
-            
-            # Bottom-right corner
-            for angle in np.linspace(np.pi/2, np.pi, 20):
-                x = right_line_x - r + r * np.cos(angle)
-                y = y_bottom + r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Bottom horizontal line
-            for x in np.linspace(right_line_x - r, left_line_x + r, 40)[::-1]:
-                route_points.append((x, y_bottom))
-            
-            # Bottom-left corner
-            for angle in np.linspace(np.pi, 3*np.pi/2, 20):
-                x = left_line_x + r + r * np.cos(angle)
-                y = y_bottom + r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-        else:
-            # Left vertical line (going down)
-            for y in np.linspace(y_top - r, y_bottom + r, 40)[::-1]:
-                route_points.append((left_line_x, y))
-            
-            # Bottom-left corner
-            for angle in np.linspace(-np.pi/2, 0, 20):
-                x = left_line_x + r * np.cos(angle)
-                y = y_bottom + r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Bottom horizontal line
-            for x in np.linspace(left_line_x + r, right_line_x - r, 40):
-                route_points.append((x, y_bottom))
-            
-            # Bottom-right corner
-            for angle in np.linspace(0, np.pi/2, 20):
-                x = right_line_x - r + r * np.cos(angle)
-                y = y_bottom + r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Right vertical line (going up)
-            for y in np.linspace(y_bottom + r, y_top - r, 40):
-                route_points.append((right_line_x, y))
-            
-            # Top-right corner
-            for angle in np.linspace(np.pi/2, np.pi, 20):
-                x = right_line_x - r + r * np.cos(angle)
-                y = y_top - r + r * np.sin(angle)
-                route_points.append((x, y))
-            
-            # Top horizontal line
-            for x in np.linspace(right_line_x - r, left_line_x + r, 40)[::-1]:
-                route_points.append((x, y_top))
-            
-            # Top-left corner
-            for angle in np.linspace(np.pi, 3*np.pi/2, 20):
-                x = left_line_x + r + r * np.cos(angle)
-                y = y_top - r + r * np.sin(angle)
-                route_points.append((x, y))
-        
-        return route_points
+        # Initialize aircraft for the right route.
+        for i, pos in enumerate(uniform_right_points):
+            patrol_index = self.find_nearest_index(right_route, pos)
+            next_index = (patrol_index + 1) % len(right_route)
+            dx = right_route[next_index][0] - right_route[patrol_index][0]
+            dy = right_route[next_index][1] - right_route[patrol_index][1]
+            heading = np.arctan2(dy, dx)
+            base = right_fobs[i % len(right_fobs)]
+            self.aircraft.append(Aircraft(
+                position=pos,
+                heading=heading,
+                base=base,
+                state='patrol',
+                patrol_points=right_route,
+                patrol_index=patrol_index
+            ))
 
     def generate_fire(self):
         """Generate random fire location near center of area"""
@@ -244,29 +326,30 @@ class ConOpsSimulation:
         return np.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
 
     def update_aircraft(self, dt: float):
-        """Update aircraft positions and states"""
+        """
+        Update aircraft positions and states.
+        (For brevity, only the revised patrol branch is shown here.)
+        """
         for aircraft in self.aircraft:
             if aircraft.state == 'patrol':
-                # Move to next patrol point with smoother motion
+                # Follow the patrol (racetrack) route in order
                 target = aircraft.patrol_points[aircraft.patrol_index]
-                dist = self.calculate_distance(aircraft.position, target)
-                
-                if dist < 0.05:  # Reduced threshold for smoother transitions
-                    # Simply increment index for all aircraft
+                if self.calculate_distance(aircraft.position, target) < 0.05:
+                    # Once close enough, increment to the next point (wrap around)
                     aircraft.patrol_index = (aircraft.patrol_index + 1) % len(aircraft.patrol_points)
-                
-                # Move towards target
+                    target = aircraft.patrol_points[aircraft.patrol_index]
+
+                # Compute heading and move towards the target
                 dx = target[0] - aircraft.position[0]
                 dy = target[1] - aircraft.position[1]
                 heading = np.arctan2(dy, dx)
-                speed = self.PATROL_SPEED_KTS * dt / 3600  # Convert to NM per timestep
-                
+                speed = self.PATROL_SPEED_KTS * dt / 3600.0  # Convert knots to NM per dt
                 aircraft.position = (
                     aircraft.position[0] + speed * np.cos(heading),
                     aircraft.position[1] + speed * np.sin(heading)
                 )
                 aircraft.heading = heading
-                
+
             elif aircraft.state == 'intercept':
                 # Move towards fire
                 dx = self.fire_location[0] - aircraft.position[0]
@@ -399,30 +482,36 @@ class ConOpsSimulation:
 
     def draw_current_state(self):
         """Draw the current state of the simulation"""
-        # Set up the plot
         plt.xlim(0, self.AREA_SIZE_NM)
         plt.ylim(0, self.AREA_SIZE_NM)
         plt.grid(True)
-        
-        # Draw patrol routes first (so they appear behind everything)
-        left_route = self.generate_patrol_route(True)
-        right_route = self.generate_patrol_route(False)
-        
-        # Draw both patrol routes
+
+        # Draw the two patrol routes as dashed lines.
+        # Use the same parameters as in setup_patrol_routes:
+        sim_center = self.AREA_SIZE_NM / 2
+        offset = 5  # same as in setup_patrol_routes
+        route_width = 4.27   # 4.27 nm wide
+        route_height = 14.0  # 14 nm tall
+        corner_radius = 0.5
+
+        left_center = (sim_center - offset, sim_center)
+        right_center = (sim_center + offset, sim_center)
+        left_route = self.generate_rounded_racetrack_route(left_center, route_width, route_height, corner_radius)
+        right_route = self.generate_rounded_racetrack_route(right_center, route_width, route_height, corner_radius)
         left_x, left_y = zip(*left_route)
         right_x, right_y = zip(*right_route)
-        plt.plot(left_x, left_y, 'k--', alpha=0.3)  # Black dotted line with transparency
-        plt.plot(right_x, right_y, 'k--', alpha=0.3)  # Black dotted line with transparency
-        
+        plt.plot(left_x, left_y, 'k--', alpha=0.3)  # Dashed line for left route
+        plt.plot(right_x, right_y, 'k--', alpha=0.3)  # Dashed line for right route
+
         # Draw bases (without range circles)
         for base in self.bases:
-            plt.plot(base.position[0], base.position[1], 
-                    'bs' if base.type == 'MOB' else 'gs', markersize=10)
-            
+            plt.plot(base.position[0], base.position[1],
+                     'bs' if base.type == 'MOB' else 'gs', markersize=10)
+
         # Draw fire location if it exists
         if self.fire_location:
             plt.plot(self.fire_location[0], self.fire_location[1], 'rx', markersize=15)
-            
+
         # Draw aircraft
         for aircraft in self.aircraft:
             color = {
@@ -431,18 +520,17 @@ class ConOpsSimulation:
                 'circle': 'orange',
                 'rtb': 'gray'
             }.get(aircraft.state, 'black')
-            
-            plt.plot(aircraft.position[0], aircraft.position[1], 
-                    'o', color=color, markersize=6)
-            
+            plt.plot(aircraft.position[0], aircraft.position[1],
+                     'o', color=color, markersize=6)
+
             # Draw heading indicator
             heading_length = 0.5
             dx = heading_length * np.cos(aircraft.heading)
             dy = heading_length * np.sin(aircraft.heading)
             plt.arrow(aircraft.position[0], aircraft.position[1], dx, dy,
-                     head_width=0.2, head_length=0.3, fc=color, ec=color)
-        
-        # Only show timer and fireball count after fire starts
+                      head_width=0.2, head_length=0.3, fc=color, ec=color)
+
+        # Show timer and fireball count after fire starts
         if self.fire_location:
             minutes = int(self.elapsed_time // 60)
             seconds = int(self.elapsed_time % 60)
@@ -450,7 +538,7 @@ class ConOpsSimulation:
             plt.title(f'Mission Time: {minutes:02d}:{seconds:02d} | Total Fireballs: {total_fireballs}')
         else:
             plt.title('Initial Patrol')
-        
+
         plt.xlabel('Distance (NM)')
         plt.ylabel('Distance (NM)')
 
