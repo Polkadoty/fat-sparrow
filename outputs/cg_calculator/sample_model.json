@@ -1,0 +1,138 @@
+{
+  "aircraft_name": "Sample Aircraft",
+  "reference_point": [
+    0,
+    0,
+    0
+  ],
+  "model_path": null,
+  "units": "metric",
+  "components": [
+    {
+      "name": "Fuselage",
+      "weight": 500.0,
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        4.0,
+        0.5,
+        0.5
+      ],
+      "color": "#1f77b4",
+      "category": "structure",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    },
+    {
+      "name": "Left Wing",
+      "weight": 150.0,
+      "location": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "size": [
+        1.5,
+        2.0,
+        0.1
+      ],
+      "color": "#1f77b4",
+      "category": "structure",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    },
+    {
+      "name": "Right Wing",
+      "weight": 150.0,
+      "location": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "size": [
+        1.5,
+        2.0,
+        0.1
+      ],
+      "color": "#1f77b4",
+      "category": "structure",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    },
+    {
+      "name": "Engine",
+      "weight": 200.0,
+      "location": [
+        -1.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        0.8,
+        0.5,
+        0.5
+      ],
+      "color": "#d62728",
+      "category": "equipment",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    },
+    {
+      "name": "Fuel Tank",
+      "weight": 100.0,
+      "location": [
+        0.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        0.5,
+        0.5,
+        0.5
+      ],
+      "color": "#2ca02c",
+      "category": "fuel",
+      "is_consumable": true,
+      "consumption_rate": 20.0
+    },
+    {
+      "name": "Pilot",
+      "weight": 80.0,
+      "location": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "size": [
+        0.4,
+        0.4,
+        1.0
+      ],
+      "color": "#9467bd",
+      "category": "crew",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    },
+    {
+      "name": "Payload",
+      "weight": 120.0,
+      "location": [
+        -0.5,
+        0.0,
+        0.0
+      ],
+      "size": [
+        0.6,
+        0.6,
+        0.6
+      ],
+      "color": "#ff7f0e",
+      "category": "payload",
+      "is_consumable": false,
+      "consumption_rate": 0.0
+    }
+  ]
+}

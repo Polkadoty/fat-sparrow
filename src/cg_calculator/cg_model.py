@@ -147,8 +147,10 @@ class CGModel:
     
     def save_to_file(self, filename: str) -> None:
         """Save the model to a JSON file"""
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        # Create directory if it doesn't exist and if there is a directory
+        dirname = os.path.dirname(filename)
+        if dirname:  # Only try to create directory if there is one
+            os.makedirs(dirname, exist_ok=True)
         
         data = {
             "aircraft_name": self.aircraft_name,
